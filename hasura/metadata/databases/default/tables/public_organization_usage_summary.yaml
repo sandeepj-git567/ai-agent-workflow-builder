@@ -1,0 +1,73 @@
+table:
+  name: organization_usage_summary
+  schema: public
+select_permissions:
+  - role: owner
+    permission:
+      columns:
+        - org_id
+        - name
+        - calls_used
+        - calls_allowed
+        - remaining
+        - quota_period_start
+        - created_at
+        - updated_at
+      filter:
+        org_id:
+          _in:
+            _select:
+              table:
+                name: org_members
+                schema: public
+              columns:
+                - org_id
+              where:
+                user_id:
+                  _eq: X-Hasura-User-Id
+  - role: editor
+    permission:
+      columns:
+        - org_id
+        - name
+        - calls_used
+        - calls_allowed
+        - remaining
+        - quota_period_start
+        - created_at
+        - updated_at
+      filter:
+        org_id:
+          _in:
+            _select:
+              table:
+                name: org_members
+                schema: public
+              columns:
+                - org_id
+              where:
+                user_id:
+                  _eq: X-Hasura-User-Id
+  - role: viewer
+    permission:
+      columns:
+        - org_id
+        - name
+        - calls_used
+        - calls_allowed
+        - remaining
+        - quota_period_start
+        - created_at
+        - updated_at
+      filter:
+        org_id:
+          _in:
+            _select:
+              table:
+                name: org_members
+                schema: public
+              columns:
+                - org_id
+              where:
+                user_id:
+                  _eq: X-Hasura-User-Id

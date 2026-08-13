@@ -1,0 +1,30 @@
+type Mutation {
+  triggerWorkflowRun(
+    workflow_id: uuid!
+  ): WorkflowRunPayload
+}
+
+type Mutation {
+  approveStep(
+    step_run_id: uuid!
+  ): StepRunPayload
+}
+
+type WorkflowRunPayload {
+  run_id: uuid!
+  workflow_id: uuid!
+  status: String!
+  triggered_by: uuid
+  trigger_type: String!
+  started_at: timestamptz
+  message: String
+}
+
+type StepRunPayload {
+  step_run_id: uuid!
+  workflow_run_id: uuid!
+  status: String!
+  approved_by: uuid
+  approved_at: timestamptz
+  message: String
+}
