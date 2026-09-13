@@ -62,3 +62,16 @@ body {
 .glow-rose {
   box-shadow: 0 0 25px -5px rgba(244, 63, 94, 0.4);
 }
+
+/* Ensure native select popups have dark backgrounds and high contrast across all OS themes */
+select option,
+select optgroup {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  padding: 6px 12px !important;
+}
+
+select optgroup {
+  color: #818cf8 !important;
+  font-weight: 700 !important;
+}

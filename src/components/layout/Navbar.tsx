@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/context/AuthContext';
@@ -10,12 +10,26 @@ import {
   Cpu, 
   Activity,
   Layers,
-  ChevronDown
+  ChevronDown,
+  Check
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const router = useRouter();
   const { currentUser, switchUser, allUsers, orgUsage, currentRole } = useAuth();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -33,6 +47,10 @@ export const Navbar: React.FC = () => {
   const used = orgUsage?.calls_used ?? 0;
   const allowed = orgUsage?.calls_allowed ?? 100;
   const percent = Math.min(100, Math.round((used / allowed) * 100));
+
+  const orgAUsers = allUsers.filter(u => u.orgId.startsWith('aaaa'));
+  const orgBUsers = allUsers.filter(u => u.orgId.startsWith('bbbb'));
+  const multiTenantUsers = allUsers.filter(u => u.id.startsWith('ab'));
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-surface-300/80 backdrop-blur-xl">
@@ -118,7 +136,7 @@ export const Navbar: React.FC = () => {
             </nav>
           </div>
 
-          {/* Right Side: Quota Gauge & User Switcher */}
+          {/* Right Side: Quota Gauge & Persona Switcher */}
           <div className="flex items-center space-x-4">
             
             {/* Quota Widget */}
@@ -148,54 +166,127 @@ export const Navbar: React.FC = () => {
               <span className="font-medium text-slate-200">{currentUser.orgName}</span>
             </div>
 
-            {/* Persona / User Switcher */}
-            <div className="relative flex items-center">
-              <div className="flex items-center space-x-2 pl-3 pr-2 py-1.5 rounded-lg bg-surface-100 border border-white/15">
-                <div className="h-6 w-6 rounded-full bg-slate-700 flex items-center justify-center">
-                  <User className="h-3.5 w-3.5 text-slate-300" />
+            {/* Persona / Custom User Switcher Dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center space-x-2.5 px-3 py-1.5 rounded-xl bg-surface-100 hover:bg-surface-200 border border-white/15 text-left transition-all cursor-pointer"
+              >
+                <div className="h-7 w-7 rounded-lg bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shadow">
+                  {currentUser.name.charAt(0)}
                 </div>
-                <div className="text-left">
-                  <div className="text-xs font-semibold text-white leading-tight">
+                <div>
+                  <div className="text-xs font-bold text-white leading-tight">
                     {currentUser.name}
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className={`text-[10px] font-mono uppercase px-1 py-0.2 rounded border font-semibold ${getRoleBadge(currentRole)}`}>
+                    <span className={`text-[9px] font-mono uppercase px-1 py-0.2 rounded border font-semibold ${getRoleBadge(currentRole)}`}>
                       {currentRole}
                     </span>
                   </div>
                 </div>
-                
-                {/* Select Dropdown */}
-                <select
-                  value={currentUser.id}
-                  onChange={(e) => switchUser(e.target.value)}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  title="Switch Persona / Account"
-                >
-                  <optgroup label="Organization A (Acme Corp)">
-                    {allUsers.filter(u => u.orgId.startsWith('aaaa')).map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.role.toUpperCase()})
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Organization B (Beta Labs)">
-                    {allUsers.filter(u => u.orgId.startsWith('bbbb')).map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} ({u.role.toUpperCase()})
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Multi-Tenant User">
-                    {allUsers.filter(u => u.id.startsWith('ab')).map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-400 ml-1" />
-              </div>
+                <ChevronDown className={`h-4 w-4 text-slate-400 ml-1 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {/* High-Contrast Glassmorphic Dropdown Popover */}
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#0f172a] border border-white/15 shadow-2xl py-2 z-50 divide-y divide-white/10 text-xs font-sans">
+                  
+                  {/* Org A */}
+                  <div className="py-2">
+                    <div className="px-4 py-1 text-[10px] font-mono font-bold tracking-wider text-indigo-400 uppercase">
+                      Organization A (Acme Corp)
+                    </div>
+                    {orgAUsers.map(u => {
+                      const isSelected = u.id === currentUser.id;
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => {
+                            switchUser(u.id);
+                            setDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 flex items-center justify-between hover:bg-white/10 transition-colors ${
+                            isSelected ? 'bg-indigo-500/20 text-white font-bold' : 'text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span>{u.name}</span>
+                            <span className={`text-[9px] font-mono uppercase px-1 rounded border ${getRoleBadge(u.role)}`}>
+                              {u.role}
+                            </span>
+                          </div>
+                          {isSelected && <Check className="h-3.5 w-3.5 text-emerald-400" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Org B */}
+                  <div className="py-2">
+                    <div className="px-4 py-1 text-[10px] font-mono font-bold tracking-wider text-cyan-400 uppercase">
+                      Organization B (Beta Labs)
+                    </div>
+                    {orgBUsers.map(u => {
+                      const isSelected = u.id === currentUser.id;
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => {
+                            switchUser(u.id);
+                            setDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 flex items-center justify-between hover:bg-white/10 transition-colors ${
+                            isSelected ? 'bg-cyan-500/20 text-white font-bold' : 'text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span>{u.name}</span>
+                            <span className={`text-[9px] font-mono uppercase px-1 rounded border ${getRoleBadge(u.role)}`}>
+                              {u.role}
+                            </span>
+                          </div>
+                          {isSelected && <Check className="h-3.5 w-3.5 text-emerald-400" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Multi-Tenant */}
+                  {multiTenantUsers.length > 0 && (
+                    <div className="py-2">
+                      <div className="px-4 py-1 text-[10px] font-mono font-bold tracking-wider text-purple-400 uppercase">
+                        Multi-Tenant User
+                      </div>
+                      {multiTenantUsers.map(u => {
+                        const isSelected = u.id === currentUser.id;
+                        return (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => {
+                              switchUser(u.id);
+                              setDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-2 flex items-center justify-between hover:bg-white/10 transition-colors ${
+                              isSelected ? 'bg-purple-500/20 text-white font-bold' : 'text-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{u.name}</span>
+                            </div>
+                            {isSelected && <Check className="h-3.5 w-3.5 text-emerald-400" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                </div>
+              )}
             </div>
 
           </div>
