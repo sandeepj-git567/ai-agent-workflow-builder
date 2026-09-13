@@ -2,11 +2,17 @@ export type UserRole = 'owner' | 'editor' | 'viewer';
 
 export type StepType = 
   | 'llm_call' 
+  | 'rag_search'
   | 'http_request' 
-  | 'db_write' 
-  | 'notify' 
   | 'conditional_branch' 
-  | 'approval_gate';
+  | 'approval_gate'
+  | 'db_write' 
+  | 'notify'
+  | 'memory_read'
+  | 'memory_write'
+  | 'transform'
+  | 'web_search'
+  | 'final_response';
 
 export type TriggerType = 
   | 'manual' 
@@ -58,6 +64,7 @@ export interface Workflow {
   name: string;
   description: string;
   status: WorkflowStatus;
+  version?: number;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -75,7 +82,7 @@ export interface WorkflowStep {
   position: number;
   config: Record<string, any>;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export interface WorkflowTrigger {
