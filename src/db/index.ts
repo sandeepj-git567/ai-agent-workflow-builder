@@ -490,6 +490,41 @@ export const db = {
     };
   },
 
+  async createOrganization(name: string, ownerUserId: string, callsAllowed = 100): Promise<Organization> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const org: Organization = {
+      id,
+      name,
+      calls_used: 0,
+      calls_allowed: callsAllowed,
+      quota_period_start: now,
+      created_at: now,
+      updated_at: now,
+    };
+
+    if (usePostgres && pool) {
+      try {
+        await pool.query(
+          `INSERT INTO public.organizations (id, name, calls_used, calls_allowed, quota_period_start, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [id, name, 0, callsAllowed, now, now, now]
+        );
+        await pool.query(
+          `INSERT INTO public.org_members (id, user_id, org_id, role, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [uuidv4(), ownerUserId, id, 'owner', now, now]
+        );
+      } catch (err) {
+        console.warn('[DB] Postgres org creation failed, using memory store:', err);
+      }
+    }
+
+    inMemoryDb.organizations.set(id, org);
+    inMemoryDb.addOrgMember(ownerUserId, id, 'owner');
+    return org;
+  },
+
   // Org Members
   async getOrgMember(userId: string, orgId: string): Promise<OrgMember | null> {
     if (usePostgres && pool) {

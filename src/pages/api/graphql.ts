@@ -87,6 +87,15 @@ async function executeGraphQL(ctx: GraphQLContext) {
       return { data: { approveStep: result } };
     }
 
+    // 2.5. insert_organizations_one / createOrganization
+    if (cleanQuery.includes('insert_organizations_one') || cleanQuery.includes('createOrganization')) {
+      const name = variables.name || variables.object?.name || 'New Organization';
+      if (!userId && !isAdmin) throw new Error('401: Unauthorized');
+
+      const created = await db.createOrganization(name, userId || 'system');
+      return { data: { insert_organizations_one: created, createOrganization: created } };
+    }
+
     // 3. insert_workflows_one / createWorkflow
     if (cleanQuery.includes('insert_workflows_one') || cleanQuery.includes('createWorkflow')) {
       const object = variables.object || variables;
