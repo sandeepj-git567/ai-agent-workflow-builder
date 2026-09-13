@@ -1,6 +1,8 @@
 import { WorkflowStep, StepRun } from '@/types';
 import { interpolateObject, interpolateVariables, getNestedValue } from './interpolator';
 import { db } from '@/db';
+import { LLMManager } from '@/lib/ai/providers';
+import { PromptTemplateService } from '@/lib/ai/prompts/promptService';
 
 export interface StepExecutionContext {
   workflowRunId: string;
@@ -29,8 +31,8 @@ export async function executeLlmStep(
   const config = step.config || {};
   const promptTemplate = config.prompt || 'Classify the sentiment of the text as positive, negative, or neutral.';
   const systemPrompt = config.system_prompt || 'You are an AI assistant in an automated workflow pipeline. Return concise and structured output.';
-  const provider = config.provider || 'groq';
-  const model = config.model || process.env.GROQ_DEFAULT_MODEL || 'llama-3.1-8b-instant';
+  const providerName = config.provider || 'groq';
+  const model = config.model || 'llama-3.1-8b-instant';
 
   // Build interpolation context
   const evalContext = {
@@ -39,7 +41,12 @@ export async function executeLlmStep(
     prev: context.stepRuns.length > 0 ? context.stepRuns[context.stepRuns.length - 1]?.output : null,
   };
 
-  const finalPrompt = interpolateVariables(promptTemplate, evalContext);
+  const compiled = PromptTemplateService.compilePrompt({
+    systemPrompt,
+    userTemplate: promptTemplate,
+    variables: evalContext,
+    untrustedContext: config.untrusted_context || config.context,
+  });
 
   let attempts = 0;
   let lastError: any = null;
@@ -47,127 +54,31 @@ export async function executeLlmStep(
   while (attempts <= maxRetries) {
     attempts++;
     try {
-      // Check for real Groq API Key
-      if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim() !== '') {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: finalPrompt },
-            ],
-            temperature: config.temperature ?? 0.3,
-            max_tokens: config.max_tokens ?? 250,
-          }),
-        });
-
-        if (!res.ok) {
-          const errData = await res.text();
-          throw new Error(`Groq API Error (${res.status}): ${errData}`);
-        }
-
-        const data = await res.json();
-        const outputText = data.choices?.[0]?.message?.content?.trim() || '';
-
-        return {
-          output: {
-            text: outputText,
-            sentiment: extractSentiment(outputText),
-            model: data.model || model,
-            provider: 'groq',
-            usage: data.usage || {},
-            prompt: finalPrompt,
-          },
-          attemptCount: attempts,
-        };
-      }
-
-      // Check for OpenAI API Key
-      if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== '') {
-        const res = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: config.model || process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o-mini',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: finalPrompt },
-            ],
-            temperature: 0.3,
-          }),
-        });
-
-        if (!res.ok) {
-          const errData = await res.text();
-          throw new Error(`OpenAI API Error (${res.status}): ${errData}`);
-        }
-
-        const data = await res.json();
-        const outputText = data.choices?.[0]?.message?.content?.trim() || '';
-
-        return {
-          output: {
-            text: outputText,
-            sentiment: extractSentiment(outputText),
-            model: data.model,
-            provider: 'openai',
-            prompt: finalPrompt,
-          },
-          attemptCount: attempts,
-        };
-      }
-
-      // High-quality local AI emulator when no external cloud key is passed
-      const promptLower = finalPrompt.toLowerCase();
-      let sentiment = 'neutral';
-      
-      const positiveKeywords = ['positive', 'love', 'great', 'amazing', 'excellent', 'good', 'happy', 'fantastic', 'superb', 'best'];
-      const negativeKeywords = ['bad', 'fail', 'terrible', 'angry', 'awful', 'poor', 'hate', 'broken', 'issue', 'defect'];
-
-      // Check user content specifically if prompt includes quoted text
-      const quotedMatch = finalPrompt.match(/"([^"]+)"/);
-      const targetText = quotedMatch ? quotedMatch[1].toLowerCase() : promptLower;
-
-      const posScore = positiveKeywords.reduce((acc, w) => acc + (targetText.includes(w) ? 1 : 0), 0);
-      const negScore = negativeKeywords.reduce((acc, w) => acc + (targetText.includes(w) ? 1 : 0), 0);
-
-      if (posScore > negScore) {
-        sentiment = 'positive';
-      } else if (negScore > posScore) {
-        sentiment = 'negative';
-      } else if (promptLower.includes('positive') && !promptLower.includes('negative')) {
-        sentiment = 'positive';
-      } else if (promptLower.includes('negative') && !promptLower.includes('positive')) {
-        sentiment = 'negative';
-      } else {
-        sentiment = 'positive';
-      }
-
-      const generatedText = `Analysis: The input sentiment is determined to be ${sentiment.toUpperCase()}. Details: User feedback processed successfully with high confidence.`;
+      const result = await LLMManager.generate({
+        provider: providerName,
+        model,
+        systemPrompt: compiled.systemPrompt,
+        prompt: compiled.finalPrompt,
+        temperature: config.temperature ?? 0.3,
+        maxTokens: config.max_tokens ?? 350,
+      });
 
       return {
         output: {
-          text: generatedText,
-          sentiment: sentiment,
-          classification: sentiment,
-          provider: 'local-llm-engine',
-          model: 'mock-llama-3.1',
-          prompt: finalPrompt,
+          text: result.text,
+          sentiment: result.sentiment || extractSentiment(result.text),
+          classification: result.sentiment || extractSentiment(result.text),
+          model: result.model,
+          provider: result.provider,
+          usage: result.usage || {},
+          prompt: compiled.finalPrompt,
         },
         attemptCount: attempts,
       };
     } catch (err: any) {
       lastError = err;
       if (attempts <= maxRetries) {
-        await new Promise(r => setTimeout(r, 600 * attempts));
+        await new Promise(r => setTimeout(r, 500 * attempts));
       }
     }
   }

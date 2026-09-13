@@ -67,6 +67,43 @@ export const Navbar: React.FC = () => {
                 <Layers className="h-4 w-4" />
                 <span>Workflows</span>
               </Link>
+
+              <Link
+                href="/agent-playground"
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  router.pathname === '/agent-playground'
+                    ? 'bg-white/10 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                }`}
+              >
+                <Cpu className="h-4 w-4 text-brand-400" />
+                <span>AI Agent</span>
+              </Link>
+
+              <Link
+                href="/knowledge-base"
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  router.pathname === '/knowledge-base'
+                    ? 'bg-white/10 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                }`}
+              >
+                <Activity className="h-4 w-4 text-cyan-400" />
+                <span>RAG Knowledge</span>
+              </Link>
+
+              <Link
+                href="/prompts"
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  router.pathname === '/prompts'
+                    ? 'bg-white/10 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                }`}
+              >
+                <Workflow className="h-4 w-4 text-purple-400" />
+                <span>Prompt Studio</span>
+              </Link>
+
               <Link
                 href="/security-audit"
                 className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -76,7 +113,7 @@ export const Navbar: React.FC = () => {
                 }`}
               >
                 <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                <span>RBAC & Security Sandbox</span>
+                <span>RBAC & Security</span>
               </Link>
             </nav>
           </div>

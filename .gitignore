@@ -39,3 +39,4 @@ yarn-error.log*
 *.sw?
 .antigravity/
 .system_generated/
+tsconfig.tsbuildinfo

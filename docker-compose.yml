@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: ankane/pgvector:v0.5.1
+    container_name: ai_workflow_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: ai_workflow_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./hasura/migrations/default/1700000000000_init_schema/up.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./hasura/migrations/default/1700000000002_add_ai_rag_tables/up.sql:/docker-entrypoint-initdb.d/02_rag.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_workflow_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_workflow_app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:postgrespassword@postgres:5432/ai_workflow_db
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET:-nhost-admin-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

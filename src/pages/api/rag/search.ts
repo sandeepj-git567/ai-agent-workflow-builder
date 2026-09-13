@@ -1,0 +1,54 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { db } from '@/db';
+import { RAGRetriever } from '@/lib/rag/retriever';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  const userId = (req.headers['x-hasura-user-id'] || req.headers['authorization']?.replace('Bearer ', '') || '') as string;
+  if (!userId) {
+    return res.status(401).json({ message: '401: Unauthorized — Authentication required' });
+  }
+
+  const body = req.body || {};
+  const memberships = await db.getUserMemberships(userId);
+  if (!memberships || memberships.length === 0) {
+    return res.status(403).json({ message: '403: Forbidden — User does not belong to any organization' });
+  }
+
+  const orgId = body.org_id || memberships[0].org_id;
+
+  // Validate org membership
+  const member = await db.getOrgMember(userId, orgId);
+  if (!member) {
+    return res.status(403).json({ message: `403: Forbidden — Access to organization ${orgId} denied` });
+  }
+
+  if (!body.query || typeof body.query !== 'string') {
+    return res.status(400).json({ message: 'query string parameter is required' });
+  }
+
+  try {
+    const results = await RAGRetriever.retrieve({
+      orgId,
+      query: body.query,
+      topK: body.top_k ? Number(body.top_k) : 3,
+      minScore: body.min_score ? Number(body.min_score) : 0.05,
+      documentId: body.document_id,
+    });
+
+    const context = RAGRetriever.buildContext(results);
+
+    return res.status(200).json({
+      success: true,
+      query: body.query,
+      results,
+      context,
+      result_count: results.length,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ message: err.message });
+  }
+}

@@ -172,3 +172,149 @@ export interface HasuraActionPayload<T = Record<string, any>> {
     [key: string]: any;
   };
 }
+
+// --- RAG Pipeline Types ---
+export interface Document {
+  id: string;
+  org_id: string;
+  name: string;
+  file_type: string;
+  source_url?: string;
+  content: string;
+  metadata: Record<string, any>;
+  status: 'pending' | 'processed' | 'failed';
+  created_at: string;
+  updated_at: string;
+  chunks?: DocumentChunk[];
+}
+
+export interface DocumentChunk {
+  id: string;
+  document_id: string;
+  org_id: string;
+  chunk_index: number;
+  content: string;
+  token_count: number;
+  metadata: Record<string, any>;
+  created_at: string;
+  embeddings?: DocumentEmbedding[];
+}
+
+export interface DocumentEmbedding {
+  id: string;
+  chunk_id: string;
+  document_id: string;
+  org_id: string;
+  provider: string;
+  model: string;
+  vector: number[];
+  created_at: string;
+}
+
+export interface RAGSearchResult {
+  chunk_id: string;
+  document_id: string;
+  document_name: string;
+  content: string;
+  score: number;
+  metadata: Record<string, any>;
+}
+
+// --- Prompt Engineering Types ---
+export interface PromptTemplate {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string;
+  purpose: string;
+  active_version: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  versions?: PromptVersion[];
+}
+
+export interface PromptVersion {
+  id: string;
+  template_id: string;
+  org_id: string;
+  version: number;
+  system_prompt: string;
+  user_template: string;
+  variables: string[];
+  model?: string;
+  temperature?: number;
+  created_by: string;
+  created_at: string;
+}
+
+// --- Agent Orchestration Types ---
+export interface AgentRun {
+  id: string;
+  org_id: string;
+  workflow_run_id?: string | null;
+  user_request: string;
+  intent?: string | null;
+  status: 'pending' | 'planning' | 'executing' | 'waiting_for_approval' | 'completed' | 'failed';
+  plan?: Record<string, any> | null;
+  final_output?: Record<string, any> | null;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+  steps?: AgentStep[];
+}
+
+export interface AgentStep {
+  id: string;
+  agent_run_id: string;
+  org_id: string;
+  step_number: number;
+  action_type: string;
+  tool_name?: string | null;
+  tool_input?: Record<string, any> | null;
+  tool_output?: Record<string, any> | null;
+  thought?: string | null;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  error?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
+
+// --- Memory System Types ---
+export interface MemoryItem {
+  id: string;
+  org_id: string;
+  user_id?: string | null;
+  conversation_id?: string | null;
+  memory_type: 'short_term' | 'long_term' | 'fact' | 'preference';
+  key: string;
+  value: Record<string, any>;
+  embedding?: number[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Tool Registry & Audit Types ---
+export interface RegisteredTool {
+  id: string;
+  name: string;
+  description: string;
+  risk_level: 'low' | 'medium' | 'high';
+  requires_approval: boolean;
+  schema: Record<string, any>;
+  enabled: boolean;
+}
+
+export interface AuditLog {
+  id: string;
+  org_id: string;
+  user_id?: string | null;
+  action: string;
+  resource_type: string;
+  resource_id?: string | null;
+  details: Record<string, any>;
+  ip_address?: string | null;
+  created_at: string;
+}
+

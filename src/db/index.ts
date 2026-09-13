@@ -10,7 +10,17 @@ import {
   StepRun, 
   WorkflowData, 
   Notification,
-  UserRole
+  UserRole,
+  Document,
+  DocumentChunk,
+  DocumentEmbedding,
+  RAGSearchResult,
+  PromptTemplate,
+  PromptVersion,
+  AgentRun,
+  AgentStep,
+  MemoryItem,
+  AuditLog
 } from '@/types';
 
 // In-memory fallback database for local execution & testing
@@ -24,6 +34,15 @@ class InMemoryDb {
   step_runs: Map<string, StepRun> = new Map();
   workflow_data: Map<string, WorkflowData> = new Map();
   notifications: Map<string, Notification> = new Map();
+  documents: Map<string, Document> = new Map();
+  document_chunks: Map<string, DocumentChunk> = new Map();
+  document_embeddings: Map<string, DocumentEmbedding> = new Map();
+  prompt_templates: Map<string, PromptTemplate> = new Map();
+  prompt_versions: Map<string, PromptVersion> = new Map();
+  agent_runs: Map<string, AgentRun> = new Map();
+  agent_steps: Map<string, AgentStep> = new Map();
+  memories: Map<string, MemoryItem> = new Map();
+  audit_logs: Map<string, AuditLog> = new Map();
 
   constructor() {
     this.seedDefaults();
@@ -236,6 +255,61 @@ class InMemoryDb {
       enabled: true,
       created_at: now,
     });
+
+    // Seed Demo RAG Document for Org A
+    const docAId = 'd1111111-1111-1111-1111-111111111111';
+    this.documents.set(docAId, {
+      id: docAId,
+      org_id: orgAId,
+      name: 'Acme Support Policy & SLA Guidelines.md',
+      file_type: 'markdown',
+      content: 'Acme Corp Customer Service Policy: All VIP customer inquiries must be responded to within 15 minutes. Positive feedback triggers VIP fast-track routing. Negative feedback triggers an escalation ticket.',
+      metadata: { author: 'Support Ops', version: '2.1' },
+      status: 'processed',
+      created_at: now,
+      updated_at: now,
+    });
+
+    const chunkAId = 'c1111111-1111-1111-1111-111111111111';
+    this.document_chunks.set(chunkAId, {
+      id: chunkAId,
+      document_id: docAId,
+      org_id: orgAId,
+      chunk_index: 0,
+      content: 'Acme Corp Customer Service Policy: All VIP customer inquiries must be responded to within 15 minutes.',
+      token_count: 17,
+      metadata: { page: 1 },
+      created_at: now,
+    });
+
+    // Seed Demo Prompt Template for Org A
+    const ptAId = 'p1111111-1111-1111-1111-111111111111';
+    this.prompt_templates.set(ptAId, {
+      id: ptAId,
+      org_id: orgAId,
+      name: 'Enterprise Sentiment & Support Routing Prompt',
+      description: 'System prompt template for classifying customer feedback and determining escalation route.',
+      purpose: 'classification',
+      active_version: 1,
+      created_by: 'a1111111-1111-1111-1111-111111111111',
+      created_at: now,
+      updated_at: now,
+    });
+
+    const pvAId = 'pv111111-1111-1111-1111-111111111111';
+    this.prompt_versions.set(pvAId, {
+      id: pvAId,
+      template_id: ptAId,
+      org_id: orgAId,
+      version: 1,
+      system_prompt: 'You are an enterprise AI support agent. Classify sentiment as POSITIVE, NEGATIVE, or NEUTRAL and extract key intent.',
+      user_template: 'Analyze the following customer input: "{{input_text}}". Context: {{retrieved_context}}',
+      variables: ['input_text', 'retrieved_context'],
+      model: 'llama-3.1-8b-instant',
+      temperature: 0.2,
+      created_by: 'a1111111-1111-1111-1111-111111111111',
+      created_at: now,
+    });
   }
 
   addOrgMember(userId: string, orgId: string, role: UserRole, id = uuidv4()) {
@@ -260,6 +334,15 @@ class InMemoryDb {
     this.step_runs.clear();
     this.workflow_data.clear();
     this.notifications.clear();
+    this.documents.clear();
+    this.document_chunks.clear();
+    this.document_embeddings.clear();
+    this.prompt_templates.clear();
+    this.prompt_versions.clear();
+    this.agent_runs.clear();
+    this.agent_steps.clear();
+    this.memories.clear();
+    this.audit_logs.clear();
     this.seedDefaults();
   }
 }
@@ -1015,5 +1098,488 @@ export const db = {
     return Array.from(inMemoryDb.notifications.values())
       .filter(n => n.org_id === orgId)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  // =========================================================================
+  // RAG Pipeline Persistence (Documents, Chunks, Embeddings, Vector Search)
+  // =========================================================================
+  async createDocument(data: {
+    org_id: string;
+    name: string;
+    file_type?: string;
+    source_url?: string;
+    content: string;
+    metadata?: Record<string, any>;
+  }): Promise<Document> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const doc: Document = {
+      id,
+      org_id: data.org_id,
+      name: data.name,
+      file_type: data.file_type || 'text',
+      source_url: data.source_url,
+      content: data.content,
+      metadata: data.metadata || {},
+      status: 'pending',
+      created_at: now,
+      updated_at: now,
+      chunks: [],
+    };
+
+    if (usePostgres && pool) {
+      try {
+        await pool.query(
+          `INSERT INTO public.documents (id, org_id, name, file_type, source_url, content, metadata, status, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [doc.id, doc.org_id, doc.name, doc.file_type, doc.source_url, doc.content, JSON.stringify(doc.metadata), doc.status, doc.created_at, doc.updated_at]
+        );
+      } catch (err) {
+        console.warn('[DB] Postgres insert document error:', err);
+      }
+    }
+    inMemoryDb.documents.set(id, doc);
+    return doc;
+  },
+
+  async getDocument(docId: string, orgId: string): Promise<Document | null> {
+    if (usePostgres && pool) {
+      try {
+        const res = await pool.query('SELECT * FROM public.documents WHERE id = $1 AND org_id = $2', [docId, orgId]);
+        if (res.rows[0]) {
+          const chunks = await pool.query('SELECT * FROM public.document_chunks WHERE document_id = $1 AND org_id = $2 ORDER BY chunk_index ASC', [docId, orgId]);
+          return { ...res.rows[0], chunks: chunks.rows };
+        }
+        return null;
+      } catch (err) {
+        console.warn('[DB] Postgres getDocument error:', err);
+      }
+    }
+    const doc = inMemoryDb.documents.get(docId);
+    if (!doc || doc.org_id !== orgId) return null;
+    const chunks = Array.from(inMemoryDb.document_chunks.values())
+      .filter(c => c.document_id === docId && c.org_id === orgId)
+      .sort((a, b) => a.chunk_index - b.chunk_index);
+    return { ...doc, chunks };
+  },
+
+  async listDocuments(orgId: string): Promise<Document[]> {
+    if (usePostgres && pool) {
+      try {
+        const res = await pool.query('SELECT * FROM public.documents WHERE org_id = $1 ORDER BY created_at DESC', [orgId]);
+        return res.rows;
+      } catch (err) {
+        console.warn('[DB] Postgres listDocuments error:', err);
+      }
+    }
+    return Array.from(inMemoryDb.documents.values())
+      .filter(d => d.org_id === orgId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  async updateDocumentStatus(docId: string, orgId: string, status: 'pending' | 'processed' | 'failed'): Promise<void> {
+    if (usePostgres && pool) {
+      try {
+        await pool.query('UPDATE public.documents SET status = $1, updated_at = NOW() WHERE id = $2 AND org_id = $3', [status, docId, orgId]);
+      } catch (err) {
+        console.warn('[DB] Postgres updateDocumentStatus error:', err);
+      }
+    }
+    const doc = inMemoryDb.documents.get(docId);
+    if (doc && doc.org_id === orgId) {
+      doc.status = status;
+      doc.updated_at = new Date().toISOString();
+    }
+  },
+
+  async deleteDocument(docId: string, orgId: string): Promise<boolean> {
+    if (usePostgres && pool) {
+      try {
+        await pool.query('DELETE FROM public.documents WHERE id = $1 AND org_id = $2', [docId, orgId]);
+      } catch (err) {
+        console.warn('[DB] Postgres deleteDocument error:', err);
+      }
+    }
+    const doc = inMemoryDb.documents.get(docId);
+    if (!doc || doc.org_id !== orgId) return false;
+
+    inMemoryDb.documents.delete(docId);
+    for (const [cId, chunk] of inMemoryDb.document_chunks.entries()) {
+      if (chunk.document_id === docId) inMemoryDb.document_chunks.delete(cId);
+    }
+    for (const [eId, emb] of inMemoryDb.document_embeddings.entries()) {
+      if (emb.document_id === docId) inMemoryDb.document_embeddings.delete(eId);
+    }
+    return true;
+  },
+
+  async createDocumentChunk(data: {
+    document_id: string;
+    org_id: string;
+    chunk_index: number;
+    content: string;
+    token_count?: number;
+    metadata?: Record<string, any>;
+  }): Promise<DocumentChunk> {
+    const id = uuidv4();
+    const chunk: DocumentChunk = {
+      id,
+      document_id: data.document_id,
+      org_id: data.org_id,
+      chunk_index: data.chunk_index,
+      content: data.content,
+      token_count: data.token_count || data.content.split(/\s+/).length,
+      metadata: data.metadata || {},
+      created_at: new Date().toISOString(),
+    };
+
+    if (usePostgres && pool) {
+      try {
+        await pool.query(
+          `INSERT INTO public.document_chunks (id, document_id, org_id, chunk_index, content, token_count, metadata, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [chunk.id, chunk.document_id, chunk.org_id, chunk.chunk_index, chunk.content, chunk.token_count, JSON.stringify(chunk.metadata), chunk.created_at]
+        );
+      } catch (err) {
+        console.warn('[DB] Postgres insert chunk error:', err);
+      }
+    }
+    inMemoryDb.document_chunks.set(id, chunk);
+    return chunk;
+  },
+
+  async createDocumentEmbedding(data: {
+    chunk_id: string;
+    document_id: string;
+    org_id: string;
+    provider?: string;
+    model?: string;
+    vector: number[];
+  }): Promise<DocumentEmbedding> {
+    const id = uuidv4();
+    const embedding: DocumentEmbedding = {
+      id,
+      chunk_id: data.chunk_id,
+      document_id: data.document_id,
+      org_id: data.org_id,
+      provider: data.provider || 'local',
+      model: data.model || 'text-embedding-3-small',
+      vector: data.vector,
+      created_at: new Date().toISOString(),
+    };
+
+    if (usePostgres && pool) {
+      try {
+        await pool.query(
+          `INSERT INTO public.document_embeddings (id, chunk_id, document_id, org_id, provider, model, vector_data, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [embedding.id, embedding.chunk_id, embedding.document_id, embedding.org_id, embedding.provider, embedding.model, JSON.stringify(embedding.vector), embedding.created_at]
+        );
+      } catch (err) {
+        console.warn('[DB] Postgres insert embedding error:', err);
+      }
+    }
+    inMemoryDb.document_embeddings.set(id, embedding);
+    return embedding;
+  },
+
+  async searchEmbeddings(
+    orgId: string,
+    queryVector: number[],
+    topK = 3,
+    minScore = 0.0
+  ): Promise<RAGSearchResult[]> {
+    const results: RAGSearchResult[] = [];
+    const orgEmbeddings = Array.from(inMemoryDb.document_embeddings.values())
+      .filter(e => e.org_id === orgId);
+
+    for (const emb of orgEmbeddings) {
+      const chunk = inMemoryDb.document_chunks.get(emb.chunk_id);
+      const doc = inMemoryDb.documents.get(emb.document_id);
+      if (!chunk || !doc) continue;
+
+      const score = cosineSimilarity(queryVector, emb.vector);
+      if (score >= minScore) {
+        results.push({
+          chunk_id: chunk.id,
+          document_id: doc.id,
+          document_name: doc.name,
+          content: chunk.content,
+          score,
+          metadata: chunk.metadata || {},
+        });
+      }
+    }
+
+    results.sort((a, b) => b.score - a.score);
+    return results.slice(0, topK);
+  },
+
+  // =========================================================================
+  // Prompt Engineering Persistence (Templates & Versions)
+  // =========================================================================
+  async createPromptTemplate(data: {
+    org_id: string;
+    name: string;
+    description?: string;
+    purpose?: string;
+    created_by: string;
+    system_prompt: string;
+    user_template: string;
+    variables?: string[];
+    model?: string;
+    temperature?: number;
+  }): Promise<PromptTemplate> {
+    const templateId = uuidv4();
+    const versionId = uuidv4();
+    const now = new Date().toISOString();
+
+    const template: PromptTemplate = {
+      id: templateId,
+      org_id: data.org_id,
+      name: data.name,
+      description: data.description || '',
+      purpose: data.purpose || 'general',
+      active_version: 1,
+      created_by: data.created_by,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const initialVersion: PromptVersion = {
+      id: versionId,
+      template_id: templateId,
+      org_id: data.org_id,
+      version: 1,
+      system_prompt: data.system_prompt,
+      user_template: data.user_template,
+      variables: data.variables || [],
+      model: data.model || 'llama-3.1-8b-instant',
+      temperature: data.temperature ?? 0.3,
+      created_by: data.created_by,
+      created_at: now,
+    };
+
+    if (usePostgres && pool) {
+      try {
+        await pool.query(
+          `INSERT INTO public.prompt_templates (id, org_id, name, description, purpose, active_version, created_by, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [template.id, template.org_id, template.name, template.description, template.purpose, template.active_version, template.created_by, template.created_at, template.updated_at]
+        );
+
+        await pool.query(
+          `INSERT INTO public.prompt_versions (id, template_id, org_id, version, system_prompt, user_template, variables, model, temperature, created_by, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [initialVersion.id, initialVersion.template_id, initialVersion.org_id, initialVersion.version, initialVersion.system_prompt, initialVersion.user_template, JSON.stringify(initialVersion.variables), initialVersion.model, initialVersion.temperature, initialVersion.created_by, initialVersion.created_at]
+        );
+      } catch (err) {
+        console.warn('[DB] Postgres insert prompt template error:', err);
+      }
+    }
+
+    inMemoryDb.prompt_templates.set(templateId, template);
+    inMemoryDb.prompt_versions.set(versionId, initialVersion);
+
+    return { ...template, versions: [initialVersion] };
+  },
+
+  async getPromptTemplate(templateId: string, orgId: string): Promise<PromptTemplate | null> {
+    const tmpl = inMemoryDb.prompt_templates.get(templateId);
+    if (!tmpl || tmpl.org_id !== orgId) return null;
+    const versions = Array.from(inMemoryDb.prompt_versions.values())
+      .filter(v => v.template_id === templateId && v.org_id === orgId)
+      .sort((a, b) => b.version - a.version);
+    return { ...tmpl, versions };
+  },
+
+  async listPromptTemplates(orgId: string): Promise<PromptTemplate[]> {
+    return Array.from(inMemoryDb.prompt_templates.values())
+      .filter(t => t.org_id === orgId)
+      .map(t => {
+        const versions = Array.from(inMemoryDb.prompt_versions.values())
+          .filter(v => v.template_id === t.id && v.org_id === orgId)
+          .sort((a, b) => b.version - a.version);
+        return { ...t, versions };
+      });
+  },
+
+  // =========================================================================
+  // Agent Orchestrator Persistence (Agent Runs & Steps)
+  // =========================================================================
+  async createAgentRun(data: {
+    org_id: string;
+    workflow_run_id?: string;
+    user_request: string;
+    intent?: string;
+  }): Promise<AgentRun> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const run: AgentRun = {
+      id,
+      org_id: data.org_id,
+      workflow_run_id: data.workflow_run_id || null,
+      user_request: data.user_request,
+      intent: data.intent || null,
+      status: 'pending',
+      plan: null,
+      final_output: null,
+      error: null,
+      created_at: now,
+      updated_at: now,
+      steps: [],
+    };
+    inMemoryDb.agent_runs.set(id, run);
+    return run;
+  },
+
+  async updateAgentRun(runId: string, orgId: string, updates: Partial<AgentRun>): Promise<AgentRun | null> {
+    const run = inMemoryDb.agent_runs.get(runId);
+    if (!run || run.org_id !== orgId) return null;
+    Object.assign(run, updates);
+    run.updated_at = new Date().toISOString();
+    return run;
+  },
+
+  async getAgentRun(runId: string, orgId: string): Promise<AgentRun | null> {
+    const run = inMemoryDb.agent_runs.get(runId);
+    if (!run || run.org_id !== orgId) return null;
+    const steps = Array.from(inMemoryDb.agent_steps.values())
+      .filter(s => s.agent_run_id === runId && s.org_id === orgId)
+      .sort((a, b) => a.step_number - b.step_number);
+    return { ...run, steps };
+  },
+
+  async listAgentRuns(orgId: string): Promise<AgentRun[]> {
+    return Array.from(inMemoryDb.agent_runs.values())
+      .filter(r => r.org_id === orgId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  async createAgentStep(data: {
+    agent_run_id: string;
+    org_id: string;
+    step_number: number;
+    action_type: string;
+    tool_name?: string;
+    tool_input?: Record<string, any>;
+    thought?: string;
+  }): Promise<AgentStep> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const step: AgentStep = {
+      id,
+      agent_run_id: data.agent_run_id,
+      org_id: data.org_id,
+      step_number: data.step_number,
+      action_type: data.action_type,
+      tool_name: data.tool_name || null,
+      tool_input: data.tool_input || null,
+      tool_output: null,
+      thought: data.thought || null,
+      status: 'running',
+      error: null,
+      started_at: now,
+      completed_at: null,
+      created_at: now,
+    };
+    inMemoryDb.agent_steps.set(id, step);
+    return step;
+  },
+
+  async updateAgentStep(stepId: string, orgId: string, updates: Partial<AgentStep>): Promise<AgentStep | null> {
+    const step = inMemoryDb.agent_steps.get(stepId);
+    if (!step || step.org_id !== orgId) return null;
+    Object.assign(step, updates);
+    return step;
+  },
+
+  // =========================================================================
+  // Memory & Audit Logging Persistence
+  // =========================================================================
+  async saveMemory(data: {
+    org_id: string;
+    user_id?: string;
+    conversation_id?: string;
+    memory_type: 'short_term' | 'long_term' | 'fact' | 'preference';
+    key: string;
+    value: Record<string, any>;
+    embedding?: number[];
+  }): Promise<MemoryItem> {
+    const id = uuidv4();
+    const now = new Date().toISOString();
+    const item: MemoryItem = {
+      id,
+      org_id: data.org_id,
+      user_id: data.user_id || null,
+      conversation_id: data.conversation_id || null,
+      memory_type: data.memory_type,
+      key: data.key,
+      value: data.value,
+      embedding: data.embedding || null,
+      created_at: now,
+      updated_at: now,
+    };
+    inMemoryDb.memories.set(id, item);
+    return item;
+  },
+
+  async getMemory(key: string, orgId: string): Promise<MemoryItem | null> {
+    for (const mem of inMemoryDb.memories.values()) {
+      if (mem.key === key && mem.org_id === orgId) return mem;
+    }
+    return null;
+  },
+
+  async listMemories(orgId: string, memoryType?: string): Promise<MemoryItem[]> {
+    return Array.from(inMemoryDb.memories.values())
+      .filter(m => m.org_id === orgId && (!memoryType || m.memory_type === memoryType))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  },
+
+  async logAuditEvent(data: {
+    org_id: string;
+    user_id?: string;
+    action: string;
+    resource_type: string;
+    resource_id?: string;
+    details?: Record<string, any>;
+    ip_address?: string;
+  }): Promise<AuditLog> {
+    const id = uuidv4();
+    const log: AuditLog = {
+      id,
+      org_id: data.org_id,
+      user_id: data.user_id || null,
+      action: data.action,
+      resource_type: data.resource_type,
+      resource_id: data.resource_id || null,
+      details: data.details || {},
+      ip_address: data.ip_address || null,
+      created_at: new Date().toISOString(),
+    };
+    inMemoryDb.audit_logs.set(id, log);
+    return log;
+  },
+
+  async listAuditLogs(orgId: string): Promise<AuditLog[]> {
+    return Array.from(inMemoryDb.audit_logs.values())
+      .filter(l => l.org_id === orgId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 };
+
+// Vector Similarity Utility (Cosine Similarity)
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (!a || !b || a.length === 0 || b.length === 0 || a.length !== b.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}

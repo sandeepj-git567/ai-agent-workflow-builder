@@ -1,38 +1,56 @@
-# ai-agent-workflow-builder
+# AI Agent & GenAI Workflow Platform
 
-> **Production-Grade Multi-Tenant AI Agent Workflow Builder MVP**
-> Built with Next.js, Hasura GraphQL Schema & Permissions, Nhost architecture, Role-Based Access Control, Human-in-the-loop Approval Gates, and Real-Time SSE Subscriptions.
+> **Production-Oriented Multi-Tenant AI Agent, RAG Pipeline & GenAI Workflow Platform**  
+> Built with Next.js 14, TypeScript, Tailwind CSS, PostgreSQL + `pgvector`, LLM Provider Abstraction (Groq / OpenAI / Local), Prompt Engineering Studio, Safe Tool Registry with SSRF Guards, Human-in-the-Loop Approval Gates, Docker Containerization, and GitHub Actions CI/CD.
 
 ---
 
-## 🌟 Key Features
+## 🌟 Key Capabilities & Architectural Highlights
 
-- **Multi-Tenant Architecture & Layer 1 Org Isolation:** Strict workspace isolation preventing unauthorized cross-tenant read/write access.
-- **Granular RBAC & Step-Level Gating (Layer 2):**
-  - **Owner:** Full workflow configuration, deletion, webhooks, and restricted step permissions (`db_write`, `notify`).
-  - **Editor:** Workflow authoring, editing, and execution of standard steps.
-  - **Viewer:** Read-only access to workflow configurations and execution history.
-- **Workflow Execution Engine (Layer 3):**
-  - `llm_call`: Groq (LLaMA 3.1 8B Instant) and OpenAI LLM reasoning with output key extraction.
-  - `http_request`: External API data fetching with configurable HTTP methods and exponential retry backoff.
-  - `conditional_branch`: Dynamic rule evaluation routing execution paths conditionally based on previous step results.
-  - `approval_gate`: Human-in-the-loop execution pauses with Hasura Action `approveStep` resuming remaining steps.
-  - `db_write`: Secure JSON payload persistence and key-value state storage.
-  - `notify`: Multi-channel notification delivery and alerting.
-- **Real-Time Execution Subscriptions:** Live execution stream powered by Server-Sent Events / GraphQL subscriptions.
-- **Automated Webhooks & Quota Enforcement:** Ingest external webhooks (`/api/webhook/[id]`) and enforce organization call quotas atomically.
-- **1-Click Security Audit:** Interactive live audit suite (`/security-audit`) verifying permission layers in real-time.
+- **Autonomous AI Agent Orchestrator:**
+  - **Intent Classification:** Intent recognition (`rag_qa`, `data_enrichment`, `code_audit`, `task_management`, `general_reasoning`).
+  - **Dynamic Task Planning:** Decomposes user goal into step-by-step tool plan.
+  - **Tool Execution Loop & Validation:** Executes tools via unified registry, validates outputs, and handles automatic retry/recovery.
+
+- **Production RAG Pipeline (`pgvector`):**
+  - **Ingestion & Chunking:** Paragraph/sentence boundary text chunker with configurable chunk size and overlap.
+  - **Embedding Provider Abstraction:** Unified interface over OpenAI (`text-embedding-3-small`) and zero-cost `LocalEmbeddingProvider` (128-dim normalized semantic vector).
+  - **Semantic Similarity Search:** Cosine similarity vector retrieval with mandatory tenant filtering.
+  - **Context Assembly & Source Attribution:** Formats retrieved chunks into grounded LLM context with explicit document citation headers.
+
+- **Unified LLM Provider Abstraction:**
+  - Extensible `LLMProvider` interface over Groq (LLaMA 3.1 8B Instant), OpenAI (GPT-4o-mini), and `MockLLMProvider` (local offline fallback for zero-cost testing).
+
+- **Prompt Engineering Studio:**
+  - Versioned prompt templates (`prompt_templates`, `prompt_versions`), parameter interpolation, and **Prompt Injection Defense** using XML boundary tags and system directives.
+
+- **Safe Tool Registry & SSRF Security Guard:**
+  - Tools: `llm_call`, `http_request`, `rag_search`, `db_write`, `notify`, `web_search`, `code_analysis`, `task_management`, `memory_operations`.
+  - **SSRF Protection:** `SSRFGuard` blocks private IP ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `169.254.169.254`), internal hostnames (`localhost`, `*.local`), and unsafe non-HTTP protocols.
+
+- **Multi-Tenant SaaS & 2-Layer Security:**
+  - **Layer 1 Org Isolation:** Strict workspace isolation via mandatory `org_id` filters preventing cross-tenant read/write data leaks.
+  - **Layer 2 Granular RBAC:** Role permissions (`owner`, `editor`, `viewer`) with step-level and tool risk-level gating.
+
+- **Human-in-the-Loop Approval Gates:**
+  - Execution state persistence with `paused` status until authorized user approves via `approveAndResume()`.
+
+- **Automated Testing Suite (36 Tests):**
+  - 36 passing Vitest unit, integration, security, and AI evaluation tests across 9 test files.
+
+- **Containerization & CI/CD Pipeline:**
+  - Multi-stage `Dockerfile`, `docker-compose.yml` with `ankane/pgvector` image, and `.github/workflows/ci.yml`.
 
 ---
 
 ## 🏗️ Tech Stack
 
-- **Framework:** Next.js 14, React 18, TypeScript 5
-- **Styling:** Tailwind CSS, Lucide Icons, Glassmorphic UI Design System
-- **API & Schema:** GraphQL, Hasura GraphQL Engine, Nhost
-- **Database:** PostgreSQL (with in-memory fallback for local testing)
-- **AI Integrations:** Groq SDK, OpenAI SDK
-- **Testing:** Vitest (21/21 passing automated tests across 5 layers)
+- **Frontend:** Next.js 14 (Pages Router), React 18, TypeScript 5.5, Tailwind CSS, Lucide Icons
+- **Backend APIs:** Next.js API Routes, GraphQL Engine, Hasura Header Conventions
+- **Database & Vector Store:** PostgreSQL with `pgvector` extension & InMemoryDb fallback
+- **AI Integrations:** Groq SDK, OpenAI API, Local LLM & Embedding Engine
+- **Testing & Quality:** Vitest (36 passing automated tests across 9 test suites)
+- **DevOps:** Docker, Docker Compose, GitHub Actions CI/CD
 
 ---
 
@@ -43,18 +61,18 @@
 npm install
 ```
 
-### 2. Environment Configuration
+### 2. Configure Environment
 Copy the example environment file:
 ```bash
 cp .env.example .env
 ```
 
-### 3. Run Test Suite
+### 3. Run Automated Test Suite
 ```bash
 npm test
 ```
 
-### 4. Start Development Server
+### 4. Start Local Development Server
 ```bash
 npm run dev
 ```
@@ -62,18 +80,31 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## 🔒 Security Audit & Testing
+## 🐳 Docker Deployment
 
-Run all 21 security and execution tests:
+Run full containerized stack (PostgreSQL + `pgvector` + Next.js App):
+```bash
+docker-compose up --build
+```
+
+---
+
+## 🧪 Test Suite Breakdown (36 Tests Passing)
+
+Execute all 36 automated security, execution, RAG, and AI eval tests:
 ```bash
 npm test
 ```
 
-- `tests/auth_org_isolation.test.ts` — Verifies organization tenant isolation (Layer 1).
-- `tests/roles_and_gating.test.ts` — Verifies role gating and step restrictions (Layer 2).
-- `tests/workflow_execution.test.ts` — Verifies execution engine and step handlers (Layer 3).
-- `tests/approval_gate.test.ts` — Verifies pause-and-resume approval gates (Layer 4).
-- `tests/quota_and_webhook.test.ts` — Verifies atomic quota limits and webhook ingestion (Layer 5).
+- `tests/auth_org_isolation.test.ts` — Verifies Layer 1 Organization Isolation.
+- `tests/roles_and_gating.test.ts` — Verifies Layer 2 RBAC Step Gating.
+- `tests/workflow_execution.test.ts` — Verifies workflow execution engine.
+- `tests/approval_gate.test.ts` — Verifies human-in-the-loop pause & resume.
+- `tests/quota_and_webhook.test.ts` — Verifies atomic quotas and webhooks.
+- `tests/rag_pipeline.test.ts` — Verifies document chunking, vector search & tenant isolation.
+- `tests/tool_ssrf.test.ts` — Verifies SSRF guard blocking private IP targets.
+- `tests/agent_orchestrator.test.ts` — Verifies intent classification & agent tool loops.
+- `tests/ai_evals.test.ts` — Verifies prompt injection resistance & AI benchmarks.
 
 ---
 
