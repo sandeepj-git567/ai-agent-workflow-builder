@@ -1,97 +1,92 @@
 # AI Agent & GenAI Workflow Platform
 
-> **Production-Oriented Multi-Tenant AI Agent, RAG Pipeline & GenAI Workflow Platform**  
-> Built with Next.js 14, TypeScript, Tailwind CSS, PostgreSQL + `pgvector`, LLM Provider Abstraction (Groq / OpenAI / Local), Prompt Engineering Studio, Safe Tool Registry with SSRF Guards, Human-in-the-Loop Approval Gates, Docker Containerization, and GitHub Actions CI/CD.
+> AI Agent Workflow Builder is a production-oriented multi-tenant GenAI workflow platform built with Next.js, TypeScript, PostgreSQL, pgvector, and multi-provider LLM integrations. It supports AI agent orchestration, RAG-based document retrieval, workflow automation, approval gates, role-based access control, tenant isolation, SSRF protection, webhook validation, quotas, and real-time execution events. The project includes automated testing, Docker configuration, and cloud deployment preparation.
 
 ---
 
-## 🌟 Key Capabilities & Architectural Highlights
+## 🌟 Key Features & Architectural Highlights
 
-- **Autonomous AI Agent Orchestrator:**
-  - **Intent Classification:** Intent recognition (`rag_qa`, `data_enrichment`, `code_audit`, `task_management`, `general_reasoning`).
-  - **Dynamic Task Planning:** Decomposes user goal into step-by-step tool plan.
-  - **Tool Execution Loop & Validation:** Executes tools via unified registry, validates outputs, and handles automatic retry/recovery.
+### 1. Autonomous AI Agent Orchestrator
+- **Intent Recognition & Planning:** Categorizes user intent (`rag_qa`, `data_enrichment`, `code_audit`, `task_management`, `general_reasoning`) and generates dynamic execution plans.
+- **Bounded Loop & Safety Policies:** Enforces `MAX_STEPS = 10` and `MAX_RETRIES = 2` to prevent infinite loops and token budget overruns.
+- **Tool Selection & Human Approval:** Integrates tool execution with persistent human-in-the-loop approval gates.
 
-- **Production RAG Pipeline (`pgvector`):**
-  - **Ingestion & Chunking:** Paragraph/sentence boundary text chunker with configurable chunk size and overlap.
-  - **Embedding Provider Abstraction:** Unified interface over OpenAI (`text-embedding-3-small`) and zero-cost `LocalEmbeddingProvider` (128-dim normalized semantic vector).
-  - **Semantic Similarity Search:** Cosine similarity vector retrieval with mandatory tenant filtering.
-  - **Context Assembly & Source Attribution:** Formats retrieved chunks into grounded LLM context with explicit document citation headers.
+### 2. RAG Pipeline & Vector Storage
+- **Multi-Format Ingestion:** Extracts and cleans text from `.txt`, `.md`, `.pdf`, `.docx`, `.json`, `.csv` files.
+- **Chunking Engine:** Paragraph/sentence chunker with 500-character target size and 50-character overlap.
+- **Vector Search (`pgvector`):** Cosine similarity retrieval with SQL `<=>` distance operator and in-memory fallback.
+- **Source Attribution:** Returns document name, chunk index, and relevance score for grounded context assembly.
 
-- **Unified LLM Provider Abstraction:**
-  - Extensible `LLMProvider` interface over Groq (LLaMA 3.1 8B Instant), OpenAI (GPT-4o-mini), and `MockLLMProvider` (local offline fallback for zero-cost testing).
+### 3. Unified LLM Provider Abstraction
+- Unified interface for **Groq** (LLaMA 3.1 8B Instant), **OpenAI** (GPT-4o-mini), **Gemini** (1.5 Flash), and **MockLLMProvider** for zero-cost offline testing.
 
-- **Prompt Engineering Studio:**
-  - Versioned prompt templates (`prompt_templates`, `prompt_versions`), parameter interpolation, and **Prompt Injection Defense** using XML boundary tags and system directives.
+### 4. 12 Executable Workflow Step Types
+1. `llm_call`: Prompt execution with model selection.
+2. `rag_search`: Document context retrieval.
+3. `http_request`: SSRF-guarded outbound HTTP client.
+4. `conditional_branch`: JavaScript expression branch evaluation.
+5. `approval_gate`: State persistence pausing execution for manual approval.
+6. `db_write`: Database row insertion.
+7. `notify`: Realtime notification event dispatch.
+8. `memory_read`: Context retrieval from short/long-term memory.
+9. `memory_write`: Fact & preference storage.
+10. `transform`: Data mapping and formatting.
+11. `web_search`: SSRF-safe web search simulation.
+12. `final_response`: Execution response payload formatting.
 
-- **Safe Tool Registry & SSRF Security Guard:**
-  - Tools: `llm_call`, `http_request`, `rag_search`, `db_write`, `notify`, `web_search`, `code_analysis`, `task_management`, `memory_operations`.
-  - **SSRF Protection:** `SSRFGuard` blocks private IP ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `169.254.169.254`), internal hostnames (`localhost`, `*.local`), and unsafe non-HTTP protocols.
-
-- **Multi-Tenant SaaS & 2-Layer Security:**
-  - **Layer 1 Org Isolation:** Strict workspace isolation via mandatory `org_id` filters preventing cross-tenant read/write data leaks.
-  - **Layer 2 Granular RBAC:** Role permissions (`owner`, `editor`, `viewer`) with step-level and tool risk-level gating.
-
-- **Human-in-the-Loop Approval Gates:**
-  - Execution state persistence with `paused` status until authorized user approves via `approveAndResume()`.
-
-- **Automated Testing Suite (36 Tests):**
-  - 36 passing Vitest unit, integration, security, and AI evaluation tests across 9 test files.
-
-- **Containerization & CI/CD Pipeline:**
-  - Multi-stage `Dockerfile`, `docker-compose.yml` with `ankane/pgvector` image, and `.github/workflows/ci.yml`.
+### 5. Multi-Tenant Isolation & 2-Layer Security
+- **Layer 1 Tenant Isolation:** Every query filters by `org_id` preventing cross-tenant read/write data leaks.
+- **Layer 2 Server-Side RBAC:** Enforces `OWNER`, `EDITOR`, `VIEWER` permission matrices across API routes and GraphQL handlers.
+- **SSRF Protection:** `SSRFGuard` blocks private IP ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `169.254.169.254`) and AWS/GCP IMDS hostnames.
 
 ---
 
-## 🏗️ Tech Stack
+## 🏗️ Technology Stack
 
 - **Frontend:** Next.js 14 (Pages Router), React 18, TypeScript 5.5, Tailwind CSS, Lucide Icons
-- **Backend APIs:** Next.js API Routes, GraphQL Engine, Hasura Header Conventions
-- **Database & Vector Store:** PostgreSQL with `pgvector` extension & InMemoryDb fallback
-- **AI Integrations:** Groq SDK, OpenAI API, Local LLM & Embedding Engine
-- **Testing & Quality:** Vitest (36 passing automated tests across 9 test suites)
-- **DevOps:** Docker, Docker Compose, GitHub Actions CI/CD
+- **Backend APIs:** Next.js API Routes, GraphQL Engine, Server-Sent Events (SSE)
+- **Database & Storage:** PostgreSQL 16 with `pgvector` extension + InMemoryDb fallback
+- **AI / LLM Integrations:** Groq SDK, OpenAI API, Google Gemini API
+- **Testing & Quality:** Vitest 2.0 (36 passing automated tests), ESLint
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start & Local Setup
 
-### 1. Install Dependencies
 ```bash
+# 1. Clone & Install Dependencies
+git clone https://github.com/sandeepj-git567/ai-agent-workflow-builder.git
+cd ai-agent-workflow-builder
 npm install
-```
 
-### 2. Configure Environment
-Copy the example environment file:
-```bash
+# 2. Configure Environment
 cp .env.example .env
-```
 
-### 3. Run Automated Test Suite
-```bash
+# 3. Run Validation Commands
+npx tsc --noEmit
+npm run lint
 npm test
-```
 
-### 4. Start Local Development Server
-```bash
+# 4. Start Development Server
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+Visit `http://localhost:3000` in your browser.
 
 ---
 
-## 🐳 Docker Deployment
+## 🐳 Docker Deployment Setup
 
-Run full containerized stack (PostgreSQL + `pgvector` + Next.js App):
+Run containerized stack (PostgreSQL + `pgvector` + Next.js App):
 ```bash
-docker-compose up --build
+docker-compose up -d
 ```
+*(Note: Docker runtime verification requires Docker installed on the host system)*
 
 ---
 
 ## 🧪 Test Suite Breakdown (36 Tests Passing)
 
-Execute all 36 automated security, execution, RAG, and AI eval tests:
 ```bash
 npm test
 ```
@@ -105,6 +100,15 @@ npm test
 - `tests/tool_ssrf.test.ts` — Verifies SSRF guard blocking private IP targets.
 - `tests/agent_orchestrator.test.ts` — Verifies intent classification & agent tool loops.
 - `tests/ai_evals.test.ts` — Verifies prompt injection resistance & AI benchmarks.
+
+---
+
+## 📝 Verification Status & Limitations
+
+- **Build & Types:** Verified complete (`npx tsc --noEmit` exit 0, `npm run lint` exit 0, `npm run build` exit 0).
+- **Test Suite:** Verified complete (36/36 tests passing).
+- **Docker & Cloud Live Deployment:** Source-code verified. Runtime verification depends on host Docker daemon & active cloud credentials.
+- **Web Search Step:** Implemented as a safe simulation endpoint.
 
 ---
 

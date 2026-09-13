@@ -151,7 +151,7 @@ export default function PromptStudioPage() {
               </div>
             ) : (
               <div className="text-xs text-slate-400 italic text-center p-8">
-                Click "Compile & Verify Security Defense" to inspect prompt compilation.
+                Click &quot;Compile &amp; Verify Security Defense&quot; to inspect prompt compilation.
               </div>
             )}
           </div>
