@@ -18,17 +18,24 @@ import {
   Building2, 
   Trash2,
   ExternalLink,
-  ShieldAlert
+  ShieldAlert,
+  ShieldCheck,
+  Activity,
+  Check,
+  Lock,
+  Cpu,
+  UserCheck
 } from 'lucide-react';
 
 export default function WorkflowsPage() {
   const router = useRouter();
-  const { currentUser, currentOrgId, currentRole, orgUsage, refreshOrgUsage } = useAuth();
+  const { currentUser, currentOrgId, currentRole, orgUsage, refreshOrgUsage, lastRealtimeEvent } = useAuth();
   
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [recentEvents, setRecentEvents] = useState<any[]>([]);
 
   // Load Workflows
   const loadWorkflows = async () => {
@@ -82,6 +89,14 @@ export default function WorkflowsPage() {
   useEffect(() => {
     loadWorkflows();
   }, [currentOrgId, currentUser.id, currentRole]);
+
+  // Listen to Real-Time SSE/Polling events
+  useEffect(() => {
+    if (lastRealtimeEvent && lastRealtimeEvent.orgId === currentOrgId) {
+      loadWorkflows();
+      setRecentEvents(prev => [lastRealtimeEvent, ...prev.slice(0, 9)]);
+    }
+  }, [lastRealtimeEvent, currentOrgId]);
 
   // Trigger Run (Manual execution)
   const handleRunWorkflow = async (workflowId: string, e: React.MouseEvent) => {
@@ -315,7 +330,7 @@ export default function WorkflowsPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-16">
       
       {/* Top Banner / Org Context */}
       <div className="glass-panel p-6 sm:p-8 rounded-2xl relative overflow-hidden">
@@ -327,15 +342,18 @@ export default function WorkflowsPage() {
               <span className="px-3 py-1 rounded-md text-xs font-mono font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30 flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5" /> {currentUser.orgName}
               </span>
-              <span className="text-xs text-slate-400 font-mono">
-                Role: <strong className="text-white uppercase">{currentRole}</strong>
+              <span className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                Active User: <strong className="text-white">{currentUser.name}</strong>
+                <span className="px-1.5 py-0.5 rounded text-[10px] uppercase font-bold bg-white/10 text-slate-200 border border-white/10">
+                  {currentRole}
+                </span>
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-2">
-              AI Agent Workflows
+              AI Agent Workflows & Organization Dashboard
             </h1>
             <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-              Build, execute, and monitor resilient multi-step AI agent pipelines with conditional branching, human approval gates, and live real-time execution subscriptions.
+              Real-time multi-tenant workspace with strict role-based access control (RBAC), live cross-user synchronization, and full PostgreSQL database persistence.
             </p>
           </div>
 
@@ -361,12 +379,123 @@ export default function WorkflowsPage() {
               </Link>
             ) : (
               <div className="px-3 py-2 rounded-xl bg-surface-200 border border-amber-500/20 text-amber-300/80 text-xs flex items-center gap-1.5 font-medium">
-                <ShieldAlert className="h-4 w-4" />
-                <span>Viewer mode (Read-only)</span>
+                <ShieldAlert className="h-4 w-4 text-amber-400" />
+                <span>Viewer Mode (Read-only access)</span>
               </div>
             )}
           </div>
         </div>
+      </div>
+
+      {/* Role Tasks & Real-Time Sync Panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left: Role Tasks & Feature Scope */}
+        <div className="glass-panel p-6 rounded-2xl space-y-4 border-indigo-500/30">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <UserCheck className="h-4 w-4 text-indigo-400" />
+              <span>Your Role & Tasks ({currentRole.toUpperCase()})</span>
+            </h2>
+          </div>
+
+          <div className="space-y-3 text-xs font-mono">
+            {currentRole === 'owner' && (
+              <>
+                <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-emerald-300 space-y-1">
+                  <span className="font-bold uppercase flex items-center gap-1.5">
+                    <Check className="h-3.5 w-3.5" /> Full Administrative Access
+                  </span>
+                  <p className="text-[11px] text-slate-300 font-sans">
+                    You have total governance over workflows, webhook triggers, notify steps, member roles, and quota allocations.
+                  </p>
+                </div>
+                <ul className="space-y-2 text-slate-300 pt-1">
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-400" /> Create & Delete Organization Workflows</li>
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-400" /> Approve Human-in-the-Loop Gate Steps</li>
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-400" /> Manage Webhook Triggers & Restricted Steps</li>
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-emerald-400" /> Audit Organization Security Events</li>
+                </ul>
+              </>
+            )}
+
+            {currentRole === 'editor' && (
+              <>
+                <div className="p-3 rounded-xl bg-indigo-950/20 border border-indigo-500/30 text-indigo-300 space-y-1">
+                  <span className="font-bold uppercase flex items-center gap-1.5">
+                    <Check className="h-3.5 w-3.5" /> Editor Builder Access
+                  </span>
+                  <p className="text-[11px] text-slate-300 font-sans">
+                    You can design pipelines, test AI agents, and ingest knowledge documents. Workflow deletion and restricted notify steps require Owner role.
+                  </p>
+                </div>
+                <ul className="space-y-2 text-slate-300 pt-1">
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-indigo-400" /> Create & Build Multi-step Workflows</li>
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-indigo-400" /> Ingest Local Documents into RAG Store</li>
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-indigo-400" /> Run AI Agent Tasks & Prompt Compilations</li>
+                  <li className="flex items-center gap-2 text-slate-500"><Lock className="h-3.5 w-3.5" /> Workflow Deletion (Requires Owner)</li>
+                </ul>
+              </>
+            )}
+
+            {currentRole === 'viewer' && (
+              <>
+                <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 text-amber-300 space-y-1">
+                  <span className="font-bold uppercase flex items-center gap-1.5">
+                    <ShieldAlert className="h-3.5 w-3.5 text-amber-400" /> Read-Only Viewer Mode
+                  </span>
+                  <p className="text-[11px] text-slate-300 font-sans">
+                    You can inspect configured workflows, execution history, and RAG knowledge bases. All creation, modification, and execution controls are restricted.
+                  </p>
+                </div>
+                <ul className="space-y-2 text-slate-300 pt-1">
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-amber-400" /> Read Workflows & Execution Runs</li>
+                  <li className="flex items-center gap-2"><Check className="h-3.5 w-3.5 text-amber-400" /> Inspect Audit Logs & RBAC Matrix</li>
+                  <li className="flex items-center gap-2 text-slate-500"><Lock className="h-3.5 w-3.5" /> Create/Edit Workflows (Restricted)</li>
+                  <li className="flex items-center gap-2 text-slate-500"><Lock className="h-3.5 w-3.5" /> Trigger Execution Runs (Restricted)</li>
+                </ul>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Live Real-Time Activity & Cross-User Connection Feed */}
+        <div className="lg:col-span-2 glass-panel p-6 rounded-2xl space-y-4 border-cyan-500/30">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-white flex items-center gap-2">
+              <Activity className="h-4 w-4 text-cyan-400 animate-pulse" />
+              <span>Real-Time Organization Connection & Activity Stream</span>
+            </h2>
+
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+              SSE Live Connected
+            </span>
+          </div>
+
+          {recentEvents.length === 0 ? (
+            <div className="p-6 rounded-xl bg-surface-200 border border-white/5 text-center text-slate-400 text-xs font-mono">
+              ⚡ Real-Time Connection Active: Trigger a workflow run, add a document, or switch users to observe instant live cross-session updates.
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+              {recentEvents.map((evt, idx) => (
+                <div key={idx} className="p-3 rounded-xl bg-surface-200 border border-cyan-500/20 flex items-center justify-between text-xs font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold uppercase text-[10px]">
+                      {evt.type}
+                    </span>
+                    <span className="text-white font-medium">{evt.payload?.name || evt.payload?.action || 'Event triggered'}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {new Date(evt.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* Workflow Cards Grid */}
@@ -374,7 +503,7 @@ export default function WorkflowsPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Layers className="h-5 w-5 text-brand-400" />
-            <span>Configured Workflows</span>
+            <span>Organization Workflows</span>
             <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">
               {workflows.length}
             </span>
@@ -411,13 +540,12 @@ export default function WorkflowsPage() {
             {workflows.map((wf) => {
               const lastRun = wf.runs?.[0];
               const steps = wf.steps || [];
-              const triggers = wf.triggers || [];
 
               return (
                 <div
                   key={wf.id}
                   onClick={() => router.push(`/workflows/${wf.id}`)}
-                  className="glass-card rounded-2xl p-6 cursor-pointer group flex flex-col justify-between"
+                  className="glass-card rounded-2xl p-6 cursor-pointer group flex flex-col justify-between hover:border-brand-500/40 transition-all"
                 >
                   <div className="space-y-4">
                     {/* Header */}
@@ -426,7 +554,7 @@ export default function WorkflowsPage() {
                         <h3 className="text-base font-bold text-white group-hover:text-brand-300 transition-colors">
                           {wf.name}
                         </h3>
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-2 font-sans">
                           {wf.description || 'No description provided.'}
                         </p>
                       </div>
@@ -466,7 +594,7 @@ export default function WorkflowsPage() {
                         </button>
                       )}
 
-                      {currentRole !== 'viewer' && (
+                      {currentRole !== 'viewer' ? (
                         <button
                           onClick={(e) => handleRunWorkflow(wf.id, e)}
                           disabled={runningId === wf.id}
@@ -475,6 +603,10 @@ export default function WorkflowsPage() {
                           <Play className="h-3.5 w-3.5 fill-current" />
                           <span>{runningId === wf.id ? 'Starting...' : 'Run'}</span>
                         </button>
+                      ) : (
+                        <span className="text-[11px] font-mono text-slate-500 italic flex items-center gap-1">
+                          <Lock className="h-3 w-3" /> Read-only
+                        </span>
                       )}
 
                       <span className="p-2 text-slate-400 group-hover:text-slate-200 transition-colors">
