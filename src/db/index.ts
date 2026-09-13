@@ -1248,6 +1248,27 @@ export const db = {
     return true;
   },
 
+  async clearDocumentChunks(docId: string, orgId: string): Promise<void> {
+    if (usePostgres && pool) {
+      try {
+        await pool.query('DELETE FROM public.document_embeddings WHERE document_id = $1 AND org_id = $2', [docId, orgId]);
+        await pool.query('DELETE FROM public.document_chunks WHERE document_id = $1 AND org_id = $2', [docId, orgId]);
+      } catch (err) {
+        console.warn('[DB] Postgres clearDocumentChunks error:', err);
+      }
+    }
+    for (const [cId, chunk] of inMemoryDb.document_chunks.entries()) {
+      if (chunk.document_id === docId && chunk.org_id === orgId) {
+        inMemoryDb.document_chunks.delete(cId);
+      }
+    }
+    for (const [eId, emb] of inMemoryDb.document_embeddings.entries()) {
+      if (emb.document_id === docId && emb.org_id === orgId) {
+        inMemoryDb.document_embeddings.delete(eId);
+      }
+    }
+  },
+
   async createDocumentChunk(data: {
     document_id: string;
     org_id: string;
@@ -1322,11 +1343,12 @@ export const db = {
     orgId: string,
     queryVector: number[],
     topK = 3,
-    minScore = 0.0
+    minScore = 0.0,
+    documentId?: string
   ): Promise<RAGSearchResult[]> {
     const results: RAGSearchResult[] = [];
     const orgEmbeddings = Array.from(inMemoryDb.document_embeddings.values())
-      .filter(e => e.org_id === orgId);
+      .filter(e => e.org_id === orgId && (!documentId || e.document_id === documentId));
 
     for (const emb of orgEmbeddings) {
       const chunk = inMemoryDb.document_chunks.get(emb.chunk_id);

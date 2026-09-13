@@ -11,7 +11,8 @@ import {
   Activity,
   Layers,
   ChevronDown,
-  Check
+  Check,
+  Sparkles
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -108,6 +109,18 @@ export const Navbar: React.FC = () => {
               >
                 <Activity className="h-4 w-4 text-cyan-400" />
                 <span>RAG Knowledge</span>
+              </Link>
+
+              <Link
+                href="/ragsys-chat"
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  router.pathname === '/ragsys-chat'
+                    ? 'bg-white/10 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+                }`}
+              >
+                <Sparkles className="h-4 w-4 text-cyan-300" />
+                <span>RagSys Chat</span>
               </Link>
 
               <Link

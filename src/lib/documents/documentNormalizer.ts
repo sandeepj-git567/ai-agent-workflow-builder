@@ -1,20 +1,95 @@
+export interface ExtractionQualityMetrics {
+  totalChars: number;
+  readableCharacterRatio: number;
+  replacementCharacterCount: number;
+  suspiciousCharacterRatio: number;
+  qualityStatus: 'good' | 'warning' | 'failed';
+  isCorrupted: boolean;
+  reason?: string;
+}
+
 export class DocumentNormalizer {
   /**
-   * Normalizes document text by stripping control characters, normalizing newlines, and removing zero-width spaces.
+   * Normalizes document text by stripping raw PDF binary markers, control characters,
+   * normalizing line breaks, and cleaning zero-width spaces.
    */
   static normalizeText(text: string): string {
     if (!text) return '';
 
     return text
-      // Replace CRLF / CR with LF
+      // Remove raw PDF binary stream header/footer artifacts if present in decoded string
+      .replace(/%PDF-\d\.\d[\s\S]*?%%EOF/gi, '')
+      .replace(/stream[\s\S]*?endstream/gi, '')
       .replace(/\r\n/g, '\n')
       .replace(/\r/g, '\n')
-      // Remove null bytes and non-printable control chars (except tabs & newlines)
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+      // Remove null bytes, replacement chars, and non-printable control chars (except tabs & newlines)
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\uFFFD]/g, '')
+      // Replace multiple consecutive spaces
+      .replace(/[ \t]{2,}/g, ' ')
       // Replace multiple consecutive blank lines (>2) with double newline
       .replace(/\n{3,}/g, '\n\n')
-      // Trim leading and trailing whitespace
       .trim();
+  }
+
+  /**
+   * Evaluates text quality and detects corrupted binary garbage or scanned PDFs.
+   * Uses Unicode property escapes so foreign languages (Kannada, Hindi, Tamil, Japanese, etc.) are recognized as valid readable text.
+   */
+  static checkExtractionQuality(rawText: string, text: string): ExtractionQualityMetrics {
+    const checkTarget = (rawText || '') + (text || '');
+    const totalChars = (text || '').length;
+
+    // Count replacement characters (\uFFFD or literal ) in raw text before stripping
+    const replacementMatch = checkTarget.match(/[\uFFFD\xFF\xFE\u0000]/g);
+    const replacementCharacterCount = replacementMatch ? replacementMatch.length : 0;
+
+    if (totalChars === 0) {
+      return {
+        totalChars: 0,
+        readableCharacterRatio: 0,
+        replacementCharacterCount,
+        suspiciousCharacterRatio: 1.0,
+        qualityStatus: 'failed',
+        isCorrupted: true,
+        reason: 'No readable text content extracted (Empty or Scanned document).',
+      };
+    }
+
+    // Count printable Unicode letters, numbers, punctuation, symbols, and spaces across all languages
+    const readableMatch = text.match(/[\p{L}\p{N}\p{P}\p{Z}\s]/gu);
+    const readableCount = readableMatch ? readableMatch.length : 0;
+    const readableCharacterRatio = Math.min(1.0, readableCount / Math.max(1, totalChars));
+
+    // Count non-printable or control symbols
+    const suspiciousMatch = text.match(/[\x00-\x1F\x7F-\x9F]/g);
+    const suspiciousCount = suspiciousMatch ? suspiciousMatch.length : 0;
+    const suspiciousCharacterRatio = suspiciousCount / Math.max(1, totalChars);
+
+    // Check for raw PDF syntax signatures (e.g. %PDF-, obj, endobj, trailer, xref)
+    const containsRawPdfMarkers = /%PDF-|\bobj\b|\bendobj\b|\bstream\b|\bendstream\b|\btrailer\b|\bxref\b/i.test(text);
+
+    let qualityStatus: 'good' | 'warning' | 'failed' = 'good';
+    let isCorrupted = false;
+    let reason: string | undefined;
+
+    if (replacementCharacterCount > 2 || containsRawPdfMarkers || readableCharacterRatio < 0.50 || suspiciousCharacterRatio > 0.15) {
+      qualityStatus = 'failed';
+      isCorrupted = true;
+      reason = 'Extracted text contains binary garbage, replacement characters, or PDF code syntax.';
+    } else if (readableCharacterRatio < 0.80 || replacementCharacterCount > 0) {
+      qualityStatus = 'warning';
+      reason = 'Extracted text contains low readable character ratio or minor encoding anomalies.';
+    }
+
+    return {
+      totalChars,
+      readableCharacterRatio: Number(readableCharacterRatio.toFixed(3)),
+      replacementCharacterCount,
+      suspiciousCharacterRatio: Number(suspiciousCharacterRatio.toFixed(3)),
+      qualityStatus,
+      isCorrupted,
+      reason,
+    };
   }
 
   /**

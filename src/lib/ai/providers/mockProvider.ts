@@ -9,12 +9,39 @@ export class MockLLMProvider implements LLMProvider {
 
   async generateText(params: LLMGenerateParams): Promise<LLMGenerateResult> {
     const promptLower = params.prompt.toLowerCase();
-    let sentiment = 'positive';
 
+    // RAG / RagSys Q&A prompt handling
+    if (params.prompt.includes('RagSys') || params.prompt.includes('Context:')) {
+      // Extract context lines from Context: ... Question:
+      const contextMatch = params.prompt.match(/Context:\s*([\s\S]*?)\n\nQuestion:/i);
+      if (contextMatch && contextMatch[1].trim()) {
+        const contextLines = contextMatch[1]
+          .split('\n')
+          .filter(l => !l.startsWith('[Source #') && !l.startsWith('---') && l.trim().length > 0);
+        
+        if (contextLines.length > 0) {
+          const answer = contextLines.join(' ');
+          return {
+            text: `Based on the document context: ${answer}`,
+            provider: 'local-llm-engine',
+            model: params.model || 'mock-ragsys-1.0',
+            usage: { promptTokens: Math.ceil(params.prompt.length / 4), completionTokens: 30, totalTokens: Math.ceil(params.prompt.length / 4) + 30 },
+          };
+        }
+      }
+
+      return {
+        text: "I couldn't find that information in the PDF.",
+        provider: 'local-llm-engine',
+        model: params.model || 'mock-ragsys-1.0',
+        usage: { promptTokens: Math.ceil(params.prompt.length / 4), completionTokens: 10, totalTokens: Math.ceil(params.prompt.length / 4) + 10 },
+      };
+    }
+
+    let sentiment = 'positive';
     const positiveKeywords = ['positive', 'love', 'great', 'amazing', 'excellent', 'good', 'happy', 'fantastic', 'superb', 'best'];
     const negativeKeywords = ['bad', 'fail', 'terrible', 'angry', 'awful', 'poor', 'hate', 'broken', 'issue', 'defect'];
 
-    // Check user content specifically if prompt includes quoted text
     const quotedMatch = params.prompt.match(/"([^"]+)"/);
     const targetText = quotedMatch ? quotedMatch[1].toLowerCase() : promptLower;
 

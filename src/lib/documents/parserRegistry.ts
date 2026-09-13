@@ -25,4 +25,23 @@ export class ParserRegistry {
         return TextParser.parse(params);
     }
   }
+
+  static async parseDocumentAsync(params: ParseDocumentParams): Promise<DocumentExtractionResult> {
+    switch (params.fileType) {
+      case 'pdf':
+        return PdfParser.parseAsync(params);
+      case 'md':
+        return MarkdownParser.parse(params);
+      case 'json':
+        return JsonParser.parse(params);
+      case 'csv':
+        return CsvParser.parse(params);
+      case 'docx':
+        return DocxParser.parse(params);
+      case 'txt':
+      case 'text':
+      default:
+        return TextParser.parse(params);
+    }
+  }
 }

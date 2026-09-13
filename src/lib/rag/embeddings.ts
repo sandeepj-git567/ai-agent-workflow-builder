@@ -116,7 +116,7 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
         hash = (hash << 5) - hash + word.charCodeAt(j);
         hash |= 0;
       }
-      const index = Math.abs(hash) % this.VECTOR_DIM;
+      const index = (hash >>> 0) % this.VECTOR_DIM;
       vector[index] += 1.0 / (i + 1); // Frequency & position weighting
     }
 

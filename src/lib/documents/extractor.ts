@@ -11,11 +11,23 @@ export class DocumentExtractor {
       throw new Error(`Document Validation Error: ${validation.reason}`);
     }
 
-    const result = ParserRegistry.parseDocument({
+    return ParserRegistry.parseDocument({
       ...params,
       fileType: validation.normalizedType,
     });
+  }
 
-    return result;
+  static async extractAsync(params: ParseDocumentParams): Promise<DocumentExtractionResult> {
+    const fileSizeBytes = typeof params.content === 'string' ? Buffer.byteLength(params.content) : params.content.length;
+    const validation = DocumentValidator.validateFile(params.filename, params.fileType, fileSizeBytes);
+
+    if (!validation.valid) {
+      throw new Error(`Document Validation Error: ${validation.reason}`);
+    }
+
+    return ParserRegistry.parseDocumentAsync({
+      ...params,
+      fileType: validation.normalizedType,
+    });
   }
 }
