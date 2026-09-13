@@ -2,6 +2,14 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { db } from '@/db';
 import { DocumentService } from '@/lib/rag/documentService';
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb',
+    },
+  },
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const userId = (req.headers['x-hasura-user-id'] || req.headers['authorization']?.replace('Bearer ', '') || '') as string;
   
