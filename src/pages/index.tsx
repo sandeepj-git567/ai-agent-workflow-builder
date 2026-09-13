@@ -27,8 +27,6 @@ import {
   UserCheck
 } from 'lucide-react';
 
-import { IntroVideoModal } from '@/components/IntroVideoModal';
-
 export default function WorkflowsPage() {
   const router = useRouter();
   const { currentUser, currentOrgId, currentRole, orgUsage, refreshOrgUsage, lastRealtimeEvent } = useAuth();
@@ -38,7 +36,6 @@ export default function WorkflowsPage() {
   const [error, setError] = useState<string | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [recentEvents, setRecentEvents] = useState<any[]>([]);
-  const [introOpen, setIntroOpen] = useState(false);
 
   // Load Workflows
   const loadWorkflows = async () => {
@@ -362,14 +359,6 @@ export default function WorkflowsPage() {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={() => setIntroOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 border border-brand-500/40 text-sm font-semibold transition-all flex items-center gap-2 shadow-sm shadow-brand-500/20 cursor-pointer"
-            >
-              <Play className="h-4 w-4 fill-current text-brand-400" />
-              <span>5s Platform Video</span>
-            </button>
-
             {currentRole === 'owner' && (
               <button
                 onClick={handleSeedDemoWorkflow}
@@ -631,9 +620,6 @@ export default function WorkflowsPage() {
           </div>
         )}
       </div>
-
-      {/* 5-Second Intro Platform Tour Video Modal */}
-      <IntroVideoModal isOpen={introOpen} onClose={() => setIntroOpen(false)} />
     </div>
   );
 }
