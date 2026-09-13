@@ -21,7 +21,7 @@ export class PdfParser {
       if (data && data.text && data.text.trim().length > 0) {
         rawText = data.text;
         
-        const rawPages = rawText.split(/\f|--- Page \d+ ---/g);
+        const rawPages = rawText.split(/\f|\n\s*--- Page \d+ ---\s*\n|\n\s*Page \d+\s*\n/gi);
         if (rawPages.length > 1) {
           rawPages.forEach((pText, i) => {
             const cleanP = DocumentNormalizer.normalizeText(pText);
@@ -29,6 +29,20 @@ export class PdfParser {
               extractedPages.push({ pageNumber: i + 1, text: cleanP });
             }
           });
+        } else {
+          const norm = DocumentNormalizer.normalizeText(rawText);
+          if (norm.length > 0) {
+            const pageSize = 1500;
+            for (let i = 0; i < norm.length; i += pageSize) {
+              const pageChunk = norm.substring(i, i + pageSize).trim();
+              if (pageChunk.length > 0) {
+                extractedPages.push({
+                  pageNumber: Math.floor(i / pageSize) + 1,
+                  text: pageChunk,
+                });
+              }
+            }
+          }
         }
       }
     } catch {

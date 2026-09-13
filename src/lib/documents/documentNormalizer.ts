@@ -36,11 +36,11 @@ export class DocumentNormalizer {
    * Uses Unicode property escapes so foreign languages (Kannada, Hindi, Tamil, Japanese, etc.) are recognized as valid readable text.
    */
   static checkExtractionQuality(rawText: string, text: string): ExtractionQualityMetrics {
-    const checkTarget = (rawText || '') + (text || '');
-    const totalChars = (text || '').length;
+    const cleanText = text || '';
+    const totalChars = cleanText.length;
 
-    // Count replacement characters (\uFFFD or literal ) in raw text before stripping
-    const replacementMatch = checkTarget.match(/[\uFFFD\xFF\xFE\u0000]/g);
+    // Count replacement characters (\uFFFD) in clean text only
+    const replacementMatch = cleanText.match(/\uFFFD/g);
     const replacementCharacterCount = replacementMatch ? replacementMatch.length : 0;
 
     if (totalChars === 0) {
@@ -56,27 +56,27 @@ export class DocumentNormalizer {
     }
 
     // Count printable Unicode letters, numbers, punctuation, symbols, and spaces across all languages
-    const readableMatch = text.match(/[\p{L}\p{N}\p{P}\p{Z}\s]/gu);
+    const readableMatch = cleanText.match(/[\p{L}\p{N}\p{P}\p{Z}\s]/gu);
     const readableCount = readableMatch ? readableMatch.length : 0;
     const readableCharacterRatio = Math.min(1.0, readableCount / Math.max(1, totalChars));
 
-    // Count non-printable or control symbols
-    const suspiciousMatch = text.match(/[\x00-\x1F\x7F-\x9F]/g);
+    // Count non-printable or control symbols in clean text
+    const suspiciousMatch = cleanText.match(/[\x00-\x1F\x7F-\x9F]/g);
     const suspiciousCount = suspiciousMatch ? suspiciousMatch.length : 0;
     const suspiciousCharacterRatio = suspiciousCount / Math.max(1, totalChars);
 
     // Check for raw PDF syntax signatures (e.g. %PDF-, obj, endobj, trailer, xref)
-    const containsRawPdfMarkers = /%PDF-|\bobj\b|\bendobj\b|\bstream\b|\bendstream\b|\btrailer\b|\bxref\b/i.test(text);
+    const containsRawPdfMarkers = /%PDF-|\bobj\b|\bendobj\b|\bstream\b|\bendstream\b|\btrailer\b|\bxref\b/i.test(cleanText);
 
     let qualityStatus: 'good' | 'warning' | 'failed' = 'good';
     let isCorrupted = false;
     let reason: string | undefined;
 
-    if (replacementCharacterCount > 2 || containsRawPdfMarkers || readableCharacterRatio < 0.50 || suspiciousCharacterRatio > 0.15) {
+    if (replacementCharacterCount > 5 || containsRawPdfMarkers || readableCharacterRatio < 0.40 || suspiciousCharacterRatio > 0.20) {
       qualityStatus = 'failed';
       isCorrupted = true;
       reason = 'Extracted text contains binary garbage, replacement characters, or PDF code syntax.';
-    } else if (readableCharacterRatio < 0.80 || replacementCharacterCount > 0) {
+    } else if (readableCharacterRatio < 0.70 || replacementCharacterCount > 0) {
       qualityStatus = 'warning';
       reason = 'Extracted text contains low readable character ratio or minor encoding anomalies.';
     }

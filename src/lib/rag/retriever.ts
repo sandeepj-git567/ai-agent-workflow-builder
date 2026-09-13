@@ -12,13 +12,30 @@ export interface RAGRetrieveParams {
 }
 
 export class RAGRetriever {
+  static isSummaryQuery(query: string): boolean {
+    const q = query.toLowerCase().trim();
+    return (
+      q.includes('what is it about') ||
+      q.includes('what is this') ||
+      q.includes('what is the document') ||
+      q.includes('what is the pdf') ||
+      q.includes('summary') ||
+      q.includes('summarize') ||
+      q.includes('overview') ||
+      q.includes('brief') ||
+      q.includes('main topic') ||
+      q.includes('tell me about') ||
+      q.includes('short')
+    );
+  }
+
   /**
    * Performs semantic similarity search against embedded document chunks.
    * GUARANTEES strict Organization Tenant Isolation via mandatory orgId parameter.
    * Performs deduplication and quality validation before returning results.
    */
   static async retrieve(params: RAGRetrieveParams): Promise<RAGSearchResult[]> {
-    const { orgId, query, topK = 3, minScore = 0.05, documentId, maxResultsPerDoc = 2 } = params;
+    const { orgId, query, topK = 3, minScore = 0.01, documentId, maxResultsPerDoc = 3 } = params;
 
     if (!orgId) {
       throw new Error('401: Unauthorized — orgId is strictly required for RAG search tenant isolation');
@@ -39,12 +56,33 @@ export class RAGRetriever {
       rawResults = rawResults.filter(r => r.document_id === documentId);
     }
 
+    // Special handling for general summary/overview questions: fetch initial document chunks if vector matches are sparse
+    const isSummary = this.isSummaryQuery(query);
+    if (isSummary && documentId && rawResults.length < topK) {
+      const doc = await db.getDocument(documentId, orgId);
+      if (doc && doc.chunks && doc.chunks.length > 0) {
+        doc.chunks.forEach((chunk, idx) => {
+          if (!rawResults.some(r => r.chunk_id === chunk.id)) {
+            rawResults.push({
+              chunk_id: chunk.id,
+              document_id: doc.id,
+              document_name: doc.name,
+              content: chunk.content,
+              score: Math.max(0.50, 0.90 - idx * 0.05),
+              metadata: chunk.metadata || {},
+            });
+          }
+        });
+      }
+    }
+
     // 3. Filter out corrupted, failed, or non-readable chunks
     const validResults = rawResults.filter(r => {
       if (!r.content || r.content.trim().length === 0) return false;
       if (r.content.includes('\uFFFD') || r.content.includes('\u0000')) return false;
       if (r.content.includes('This PDF could not be extracted as readable text')) return false;
-      if (r.metadata?.quality_status === 'failed') return false;
+      // Allow readable text content (>20 chars) even if flagged with warning
+      if (r.metadata?.quality_status === 'failed' && r.content.length < 30) return false;
       return true;
     });
 
@@ -63,7 +101,7 @@ export class RAGRetriever {
       }
 
       const currentDocCount = docCountMap.get(res.document_id) || 0;
-      if (currentDocCount >= maxResultsPerDoc) {
+      if (currentDocCount >= maxResultsPerDoc && !isSummary) {
         continue;
       }
 

@@ -12,20 +12,53 @@ export class MockLLMProvider implements LLMProvider {
 
     // RAG / RagSys Q&A prompt handling
     if (params.prompt.includes('RagSys') || params.prompt.includes('Context:')) {
-      // Extract context lines from Context: ... Question:
       const contextMatch = params.prompt.match(/Context:\s*([\s\S]*?)\n\nQuestion:/i);
+      const questionMatch = params.prompt.match(/Question:\s*([\s\S]*?)\n\nAnswer:/i);
+      const questionText = questionMatch ? questionMatch[1].trim() : '';
+
       if (contextMatch && contextMatch[1].trim()) {
-        const contextLines = contextMatch[1]
+        const rawContext = contextMatch[1].trim();
+
+        // Filter out header markers and retrieve clean context text lines
+        const contentLines = rawContext
           .split('\n')
           .filter(l => !l.startsWith('[Source #') && !l.startsWith('---') && l.trim().length > 0);
-        
-        if (contextLines.length > 0) {
-          const answer = contextLines.join(' ');
+
+        if (contentLines.length > 0) {
+          const cleanText = contentLines.join(' ');
+          const isSummary = /what is it about|summarize|summary|overview|what is this|brief|short|main topic/i.test(questionText || promptLower);
+
+          if (isSummary) {
+            const sentences = cleanText.match(/[^.!?]+[.!?]+/g) || [cleanText];
+            const summarySentences = sentences.slice(0, 3).map(s => s.trim()).join(' ');
+            return {
+              text: `This PDF document covers key information extracted from the text:\n\n${summarySentences}\n\nIn short, it provides detailed content regarding ${sentences[0] ? sentences[0].substring(0, 60) + '...' : 'the uploaded topic'}.`,
+              provider: 'local-llm-engine',
+              model: params.model || 'mock-ragsys-1.0',
+              usage: { promptTokens: Math.ceil(params.prompt.length / 4), completionTokens: 60, totalTokens: Math.ceil(params.prompt.length / 4) + 60 },
+            };
+          }
+
+          // Specific Question Matching
+          const qWords = (questionText || '').toLowerCase().split(/\s+/).filter(w => w.length > 3);
+          const sentences = cleanText.match(/[^.!?]+[.!?]+/g) || [cleanText];
+          let bestSentence = sentences[0];
+          let maxMatches = 0;
+
+          for (const sentence of sentences) {
+            const sLower = sentence.toLowerCase();
+            const matches = qWords.reduce((acc, w) => acc + (sLower.includes(w) ? 1 : 0), 0);
+            if (matches > maxMatches) {
+              maxMatches = matches;
+              bestSentence = sentence;
+            }
+          }
+
           return {
-            text: `Based on the document context: ${answer}`,
+            text: `Based on the document context:\n\n${bestSentence.trim()}`,
             provider: 'local-llm-engine',
             model: params.model || 'mock-ragsys-1.0',
-            usage: { promptTokens: Math.ceil(params.prompt.length / 4), completionTokens: 30, totalTokens: Math.ceil(params.prompt.length / 4) + 30 },
+            usage: { promptTokens: Math.ceil(params.prompt.length / 4), completionTokens: 40, totalTokens: Math.ceil(params.prompt.length / 4) + 40 },
           };
         }
       }

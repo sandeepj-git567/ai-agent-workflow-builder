@@ -40,12 +40,13 @@ export class RagSysService {
     }
 
     // 1. Retrieve relevant vector chunks for organization & document
+    const isSummary = RAGRetriever.isSummaryQuery(question);
     const docs = await RAGRetriever.retrieve({
       orgId,
       query: question,
-      topK,
+      topK: isSummary ? Math.max(topK, 5) : topK,
       documentId,
-      minScore: 0.05,
+      minScore: 0.01,
     });
 
     if (!docs || docs.length === 0) {
@@ -66,9 +67,13 @@ export class RagSysService {
     const contextText = contextBlocks.join('\n\n---\n\n');
 
     // 3. Assemble RagSys strict prompt
+    const promptInstruction = isSummary
+      ? `The user wants a summary or brief overview of the PDF. Synthesize a clear, concise overview based on the provided context.`
+      : `Answer the user's question using ONLY the information provided in the context.`;
+
     const prompt = `You are a PDF Question Answering Assistant (RagSys).
 
-Answer the user's question using ONLY the information provided in the context.
+${promptInstruction}
 
 Rules:
 1. Use only the context.
